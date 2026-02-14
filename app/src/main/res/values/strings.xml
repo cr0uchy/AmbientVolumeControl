@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ambient Volume</string>
+    <string name="notification_channel_name">Ambient Monitoring</string>
+    <string name="notification_channel_description">Shows when ambient noise monitoring is active</string>
+</resources>
