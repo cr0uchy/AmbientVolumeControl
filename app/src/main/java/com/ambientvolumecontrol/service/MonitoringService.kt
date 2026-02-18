@@ -7,6 +7,7 @@ import android.content.Intent
 import android.media.AudioManager
 import android.os.Binder
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.ambientvolumecontrol.AmbientVolumeApp
 import com.ambientvolumecontrol.MainActivity
@@ -15,6 +16,7 @@ import com.ambientvolumecontrol.audio.AmbientSampler
 import com.ambientvolumecontrol.audio.AudioMonitor
 import com.ambientvolumecontrol.audio.SilenceDetector
 import com.ambientvolumecontrol.audio.VolumeController
+import com.ambientvolumecontrol.model.DetectionMode
 import com.ambientvolumecontrol.model.VolumeChangeEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +39,9 @@ class MonitoringService : Service() {
     private lateinit var ambientSampler: AmbientSampler
     private lateinit var volumeController: VolumeController
 
+    // Ambient reading captured during the end-of-song gap, applied on next song start
+    private var pendingAmbientDb: Float? = null
+
     // State exposed to UI
     private val _currentDb = MutableStateFlow(0f)
     val currentDb: StateFlow<Float> = _currentDb
@@ -58,6 +63,18 @@ class MonitoringService : Service() {
 
     private val _lastAmbientDb = MutableStateFlow<Float?>(null)
     val lastAmbientDb: StateFlow<Float?> = _lastAmbientDb
+
+    private val _currentSongTitle = MutableStateFlow<String?>(null)
+    val currentSongTitle: StateFlow<String?> = _currentSongTitle
+
+    private val _currentArtist = MutableStateFlow<String?>(null)
+    val currentArtist: StateFlow<String?> = _currentArtist
+
+    private val _detectionMode = MutableStateFlow(DetectionMode.SILENCE)
+    val detectionMode: StateFlow<DetectionMode> = _detectionMode
+
+    private val _mediaSessionAvailable = MutableStateFlow(false)
+    val mediaSessionAvailable: StateFlow<Boolean> = _mediaSessionAvailable
 
     // Settings
     var silenceThresholdDb: Float
@@ -102,7 +119,62 @@ class MonitoringService : Service() {
         _isMonitoring.value = true
         audioMonitor.start(serviceScope)
 
-        // Main monitoring loop
+        val hasMediaSession = MediaListenerService.isEnabled(this)
+        _mediaSessionAvailable.value = hasMediaSession
+
+        if (hasMediaSession) {
+            _detectionMode.value = DetectionMode.MEDIA_SESSION
+            startMediaSessionMonitoring()
+        } else {
+            _detectionMode.value = DetectionMode.SILENCE
+            startSilenceMonitoring()
+        }
+
+        // Always collect dB for the meter display
+        serviceScope.launch {
+            audioMonitor.dbLevel.collect { db ->
+                _currentDb.value = db
+            }
+        }
+    }
+
+    private fun startMediaSessionMonitoring() {
+        // In MEDIA_SESSION mode we know exactly when a song changes, so sample
+        // ambient noise immediately on the transition — no silence detection needed.
+        // The mic reading at the moment of song change is the best available
+        // estimate of ambient noise regardless of how loud the room is.
+        serviceScope.launch {
+            MediaListenerService.songChanged.collect { songInfo ->
+                _currentSongTitle.value = songInfo.title
+                _currentArtist.value = songInfo.artist
+
+                Log.d("AVC_Monitor", "songChanged: title=${songInfo.title} — sampling ambient now")
+                val ambientDb = ambientSampler.sampleAmbientNoise(audioMonitor.dbLevel)
+                Log.d("AVC_Monitor", "Ambient sample: $ambientDb dB")
+
+                if (ambientDb != null) {
+                    _lastAmbientDb.value = ambientDb
+
+                    val entry = volumeController.adjustVolume(
+                        ambientDb = ambientDb,
+                        targetRatioDb = targetRatioDb,
+                        minVolume = minVolume
+                    )
+                    Log.d("AVC_Monitor", "Volume adjusted: ${entry.oldVolume} -> ${entry.newVolume}/${_maxVolume.value}")
+
+                    _currentVolume.value = volumeController.currentVolume
+                    addHistoryEntry(entry)
+
+                    val title = songInfo.title ?: "Unknown"
+                    updateNotification(
+                        "Now: $title • Ambient: ${ambientDb.toInt()} dB • Vol: ${entry.newVolume}/${_maxVolume.value}"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun startSilenceMonitoring() {
         serviceScope.launch {
             var lastSilenceState: SilenceDetector.SilenceState =
                 SilenceDetector.SilenceState.MusicPlaying
@@ -118,13 +190,11 @@ class MonitoringService : Service() {
                 if (currentState is SilenceDetector.SilenceState.SilenceDetected &&
                     lastSilenceState is SilenceDetector.SilenceState.MusicPlaying
                 ) {
-                    // Sample ambient noise during the gap
                     val ambientDb = ambientSampler.sampleAmbientNoise(audioMonitor.dbLevel)
 
                     if (ambientDb != null) {
                         _lastAmbientDb.value = ambientDb
 
-                        // Adjust volume based on ambient noise
                         val entry = volumeController.adjustVolume(
                             ambientDb = ambientDb,
                             targetRatioDb = targetRatioDb,
@@ -132,17 +202,8 @@ class MonitoringService : Service() {
                         )
 
                         _currentVolume.value = volumeController.currentVolume
+                        addHistoryEntry(entry)
 
-                        // Add to history (keep last 50 entries)
-                        val history = _volumeHistory.value.toMutableList()
-                        history.add(0, entry)
-                        _volumeHistory.value = if (history.size > 50) {
-                            history.take(50)
-                        } else {
-                            history
-                        }
-
-                        // Update notification
                         updateNotification(
                             "Ambient: ${ambientDb.toInt()} dB • Volume: ${entry.newVolume}/${_maxVolume.value}"
                         )
@@ -155,10 +216,17 @@ class MonitoringService : Service() {
         }
     }
 
+    private fun addHistoryEntry(entry: VolumeChangeEntry) {
+        val history = _volumeHistory.value.toMutableList()
+        history.add(0, entry)
+        _volumeHistory.value = if (history.size > 50) history.take(50) else history
+    }
+
     fun stopMonitoring() {
         _isMonitoring.value = false
         audioMonitor.stop()
         silenceDetector.reset()
+        pendingAmbientDb = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
