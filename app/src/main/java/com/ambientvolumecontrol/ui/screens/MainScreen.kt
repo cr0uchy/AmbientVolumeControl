@@ -14,16 +14,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,10 +38,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ambientvolumecontrol.model.DetectionMode
 import com.ambientvolumecontrol.ui.components.DbMeter
 import com.ambientvolumecontrol.ui.components.SettingsPanel
 import com.ambientvolumecontrol.ui.components.VolumeHistoryList
@@ -51,6 +58,11 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var hasAudioPermission by remember { mutableStateOf(false) }
     var hasNotificationPermission by remember { mutableStateOf(false) }
+
+    // Refresh media session availability when screen resumes
+    LaunchedEffect(Unit) {
+        viewModel.refreshMediaSessionAvailability()
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -93,8 +105,19 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
             // Status indicator
             StatusBadge(
                 isMonitoring = state.isMonitoring,
-                silenceDetected = state.silenceDetected
+                silenceDetected = state.silenceDetected,
+                detectionMode = state.detectionMode
             )
+
+            // Now playing info (MediaSession mode)
+            if (state.detectionMode == DetectionMode.MEDIA_SESSION &&
+                state.currentSongTitle != null
+            ) {
+                NowPlayingCard(
+                    title = state.currentSongTitle,
+                    artist = state.currentArtist
+                )
+            }
 
             // dB Meter
             DbMeter(
@@ -145,6 +168,14 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Media session permission prompt
+            if (!state.mediaSessionAvailable) {
+                MediaSessionPermissionCard(
+                    onGrantPermission = { viewModel.openNotificationListenerSettings() }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             // Settings
             SettingsPanel(
                 silenceThresholdDb = state.silenceThresholdDb,
@@ -167,12 +198,14 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
 @Composable
 private fun StatusBadge(
     isMonitoring: Boolean,
-    silenceDetected: Boolean
+    silenceDetected: Boolean,
+    detectionMode: DetectionMode
 ) {
     val (text, color) = when {
         !isMonitoring -> "Stopped" to MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        detectionMode == DetectionMode.MEDIA_SESSION -> "Monitoring (Media Session)" to Color(0xFF4CAF50)
         silenceDetected -> "Gap Detected - Sampling" to AccentTeal
-        else -> "Monitoring" to Color(0xFF4CAF50)
+        else -> "Monitoring (Silence)" to Color(0xFF4CAF50)
     }
 
     Box(
@@ -186,5 +219,86 @@ private fun StatusBadge(
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
             color = color
         )
+    }
+}
+
+@Composable
+private fun NowPlayingCard(
+    title: String?,
+    artist: String?
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Now Playing",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = title ?: "Unknown",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (artist != null) {
+                Text(
+                    text = artist,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediaSessionPermissionCard(
+    onGrantPermission: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Enable song change detection",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Grant notification access to detect when songs change instead of relying on silence gaps.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(onClick = onGrantPermission) {
+                Text("Grant Access")
+            }
+        }
     }
 }

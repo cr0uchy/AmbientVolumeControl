@@ -76,7 +76,7 @@ fun SettingsPanel(
                 label = "Minimum Volume",
                 value = minVolume.toFloat(),
                 valueText = "$minVolume / $maxVolume",
-                range = 0f..maxVolume.toFloat() / 2f,
+                range = 1f..maxVolume.toFloat() / 2f,
                 description = "Lowest volume the app will set (prevents muting)",
                 onValueChange = { onMinVolumeChange(it.toInt()) }
             )
