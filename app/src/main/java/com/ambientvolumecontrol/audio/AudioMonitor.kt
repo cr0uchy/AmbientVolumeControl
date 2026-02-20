@@ -49,15 +49,24 @@ class AudioMonitor {
 
         scope.launch(Dispatchers.Default) {
             var logCounter = 0
+            var restartAttempts = 0
             val buffer = ShortArray(minBufferSize / 2)
             while (isActive) {
                 // Restart recording if another app (e.g. music player) temporarily took the mic
                 if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-                    Log.d("AVC_Audio", "Recording stopped unexpectedly — restarting")
-                    try { audioRecord?.startRecording() } catch (_: IllegalStateException) {}
-                    Thread.sleep(200)
+                    if (restartAttempts >= 10) {
+                        Log.e("AVC_Audio", "Mic unavailable after $restartAttempts attempts — backing off 5s")
+                        Thread.sleep(5000)
+                        restartAttempts = 0
+                    } else {
+                        Log.d("AVC_Audio", "Recording stopped unexpectedly — restarting (attempt ${restartAttempts + 1})")
+                        try { audioRecord?.startRecording() } catch (_: IllegalStateException) {}
+                        Thread.sleep(200)
+                        restartAttempts++
+                    }
                     continue
                 }
+                restartAttempts = 0
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                 if (read > 0) {
                     val rms = computeRms(buffer, read)

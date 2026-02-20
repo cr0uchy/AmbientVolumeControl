@@ -47,7 +47,9 @@ class MediaListenerService : NotificationListenerService() {
     data class SongInfo(
         val title: String?,
         val artist: String?,
-        val packageName: String?
+        val packageName: String?,
+        val durationMs: Long?,   // total track length, null if not provided
+        val positionMs: Long?    // playback position at the moment of the event
     )
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -102,10 +104,15 @@ class MediaListenerService : NotificationListenerService() {
 
             override fun onMetadataChanged(metadata: MediaMetadata?) {
                 metadata ?: return
+                val duration = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION)
+                    .takeIf { it > 0 }
+                val position = controller.playbackState?.position?.takeIf { it >= 0 }
                 val info = SongInfo(
                     title = metadata.getString(MediaMetadata.METADATA_KEY_TITLE),
                     artist = metadata.getString(MediaMetadata.METADATA_KEY_ARTIST),
-                    packageName = controller.packageName
+                    packageName = controller.packageName,
+                    durationMs = duration,
+                    positionMs = position
                 )
                 serviceScope.launch { _songChanged.emit(info) }
             }

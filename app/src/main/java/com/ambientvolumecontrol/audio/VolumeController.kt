@@ -1,6 +1,7 @@
 package com.ambientvolumecontrol.audio
 
 import android.media.AudioManager
+import android.util.Log
 import com.ambientvolumecontrol.model.VolumeChangeEntry
 
 class VolumeController(private val audioManager: AudioManager) {
@@ -36,11 +37,17 @@ class VolumeController(private val audioManager: AudioManager) {
         val newVolume = (normalizedDb * max).toInt().coerceIn(minVolume, max)
 
         if (newVolume != oldVolume) {
-            audioManager.setStreamVolume(
-                AudioManager.STREAM_MUSIC,
-                newVolume,
-                0 // No flags — don't show system volume UI
-            )
+            try {
+                audioManager.setStreamVolume(
+                    AudioManager.STREAM_MUSIC,
+                    newVolume,
+                    0 // No flags — don't show system volume UI
+                )
+            } catch (e: SecurityException) {
+                Log.e("AVC_Volume", "Permission denied setting volume: ${e.message}")
+            } catch (e: Exception) {
+                Log.e("AVC_Volume", "Failed to set volume: ${e.message}")
+            }
         }
 
         return VolumeChangeEntry(

@@ -106,11 +106,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(isMonitoring = false) }
     }
 
-    fun updateThreshold(db: Float) {
-        _state.update { it.copy(silenceThresholdDb = db) }
-        service?.silenceThresholdDb = db
-    }
-
     fun updateTargetRatio(ratio: Float) {
         _state.update { it.copy(targetRatioDb = ratio) }
         service?.targetRatioDb = ratio

@@ -6,7 +6,6 @@ data class MonitoringState(
     val silenceDetected: Boolean = false,
     val currentVolume: Int = 0,
     val maxVolume: Int = 15,
-    val silenceThresholdDb: Float = 35f,
     val targetRatioDb: Float = 10f,
     val minVolume: Int = 1,
     val volumeHistory: List<VolumeChangeEntry> = emptyList(),

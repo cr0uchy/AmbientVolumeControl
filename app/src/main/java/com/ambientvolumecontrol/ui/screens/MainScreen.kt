@@ -178,11 +178,9 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
 
             // Settings
             SettingsPanel(
-                silenceThresholdDb = state.silenceThresholdDb,
                 targetRatioDb = state.targetRatioDb,
                 minVolume = state.minVolume,
                 maxVolume = state.maxVolume,
-                onThresholdChange = { viewModel.updateThreshold(it) },
                 onRatioChange = { viewModel.updateTargetRatio(it) },
                 onMinVolumeChange = { viewModel.updateMinVolume(it) }
             )
@@ -248,18 +246,22 @@ private fun NowPlayingCard(
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = title ?: "Unknown",
+                modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
             if (artist != null) {
                 Text(
                     text = artist,
+                    modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
                 )
             }
         }
