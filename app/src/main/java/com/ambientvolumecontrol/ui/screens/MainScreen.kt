@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -25,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -58,6 +60,7 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var hasAudioPermission by remember { mutableStateOf(false) }
     var hasNotificationPermission by remember { mutableStateOf(false) }
+    var showMicDisclosure by remember { mutableStateOf(false) }
 
     // Refresh media session availability when screen resumes
     LaunchedEffect(Unit) {
@@ -134,17 +137,47 @@ fun MainScreen(viewModel: MainViewModel = viewModel()) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Microphone prominent disclosure dialog (required by Google Play policy)
+            if (showMicDisclosure) {
+                AlertDialog(
+                    onDismissRequest = { showMicDisclosure = false },
+                    title = { Text("Microphone Access") },
+                    text = {
+                        Text(
+                            "Ambient Volume Control uses the microphone to measure the noise level " +
+                            "in your environment. This audio is processed locally on your device " +
+                            "and is never recorded, stored, or transmitted anywhere.\n\n" +
+                            "The app adjusts your music volume automatically based on how loud " +
+                            "your surroundings are."
+                        )
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            showMicDisclosure = false
+                            val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            permissionLauncher.launch(permissions.toTypedArray())
+                        }) {
+                            Text("Continue")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showMicDisclosure = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
             // Start/Stop button
             Button(
                 onClick = {
                     if (state.isMonitoring) {
                         viewModel.stopMonitoring()
                     } else {
-                        val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        permissionLauncher.launch(permissions.toTypedArray())
+                        showMicDisclosure = true
                     }
                 },
                 modifier = Modifier
