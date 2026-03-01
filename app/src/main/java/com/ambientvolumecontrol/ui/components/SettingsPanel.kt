@@ -21,11 +21,9 @@ import com.ambientvolumecontrol.ui.theme.AccentTeal
 
 @Composable
 fun SettingsPanel(
-    silenceThresholdDb: Float,
     targetRatioDb: Float,
     minVolume: Int,
     maxVolume: Int,
-    onThresholdChange: (Float) -> Unit,
     onRatioChange: (Float) -> Unit,
     onMinVolumeChange: (Int) -> Unit,
     modifier: Modifier = Modifier
@@ -47,25 +45,13 @@ fun SettingsPanel(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Silence Threshold
-            SliderSetting(
-                label = "Silence Threshold",
-                value = silenceThresholdDb,
-                valueText = "${silenceThresholdDb.toInt()} dB",
-                range = 20f..60f,
-                description = "Audio level below which a gap between songs is detected",
-                onValueChange = onThresholdChange
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             // Target Ratio
             SliderSetting(
                 label = "Music-to-Noise Ratio",
                 value = targetRatioDb,
-                valueText = "+${targetRatioDb.toInt()} dB",
-                range = 0f..25f,
-                description = "How much louder the music should be compared to ambient noise",
+                valueText = "${if (targetRatioDb >= 0) "+" else ""}${targetRatioDb.toInt()} dB",
+                range = -15f..25f,
+                description = "How much louder (or quieter) the music should be compared to ambient noise",
                 onValueChange = onRatioChange
             )
 
@@ -76,7 +62,7 @@ fun SettingsPanel(
                 label = "Minimum Volume",
                 value = minVolume.toFloat(),
                 valueText = "$minVolume / $maxVolume",
-                range = 0f..maxVolume.toFloat() / 2f,
+                range = 1f..maxVolume.toFloat() / 2f,
                 description = "Lowest volume the app will set (prevents muting)",
                 onValueChange = { onMinVolumeChange(it.toInt()) }
             )

@@ -11,6 +11,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -68,7 +69,7 @@ fun VolumeHistoryList(
 
 @Composable
 private fun VolumeHistoryItem(entry: VolumeChangeEntry) {
-    val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val directionColor = when (entry.direction) {
         VolumeDirection.UP -> VolumeUp
         VolumeDirection.DOWN -> VolumeDown
